@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 
-from flask import request, session, jsonify
+from flask import request, session, jsonify, make_response
 from flask_restful import Resource
 from sqlalchemy.exc import IntegrityError
+import traceback
 
 from config import app, db, api
 from models import User, Recipe
@@ -36,8 +37,9 @@ class Signup(Resource):
 
             return new_user.to_dict(), 201
 
-        except:
-            return {"error": "something went wrong"}, 500
+        except Exception as e:
+            traceback.print_exc()
+            return {"error": str(e)}, 500
 
 class CheckSession(Resource):
     def get(self):
@@ -58,13 +60,71 @@ class CheckSession(Resource):
             return {"error": "Unauthorized"}, 401
 
 class Login(Resource):
-    pass
+    def post(self):
+        data = request.get_json()
+        user = db.session.query(User).filter(User.username == data['username']).first()
+        password = data['password']
+        if user and user.authenticate(password):
+            session["user_id"] = user.id
+            return {
+                "id": user.id,
+                    "username": user.username,
+                    "image_url": user.image_url,
+                    "bio": user.bio
+            }, 200
+        else:
+            return {
+                "error": "invalid username or password"
+            }, 401
 
 class Logout(Resource):
-    pass
+    def delete(self):
+        user = db.session.query(User).filter(User.id == session.get('user_id')).first()
+        if user:
+            session['user_id'] = None
+            return make_response("", 204)
+        else:
+            return {
+                "error": "unauthorized"
+            }, 401
 
 class RecipeIndex(Resource):
-    pass
+    def get(self):
+        user = db.session.query(User).filter(User.id == session.get('user_id')).first()
+        if user:
+            return [recipe.to_dict() for recipe in user.recipes], 200
+        else:
+            return {
+                "error": "unauthorized"
+            }, 401
+        
+    def post(self):
+        user_id = session.get('user_id')
+        if not user_id:
+            return { "error": "Unauthorized" }, 401
+
+        data = request.get_json()
+        title = data.get('title')
+        instructions = data.get('instructions')
+        minutes_to_complete = data.get('minutes_to_complete')
+
+        if len(instructions) < 50:
+            return {
+                "error": "instructions must be 50 characters or longer"
+            }, 422
+
+        new_recipe = Recipe(
+            title=title,
+            instructions=instructions,
+            minutes_to_complete=minutes_to_complete,
+            user_id=user_id
+        )
+
+        db.session.add(new_recipe)
+        db.session.commit()
+
+        return new_recipe.to_dict(), 201
+
 
 api.add_resource(Signup, '/signup', endpoint='signup')
 api.add_resource(CheckSession, '/check_session', endpoint='check_session')

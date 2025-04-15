@@ -15,7 +15,7 @@ class User(db.Model, SerializerMixin):
 
     #relationships
     recipes = db.relationship('Recipe', backref='user', lazy=True)
-    serialize_rules = ('-password_hash',)
+    serialize_rules = ('-_password_hash', '-recipes',)
 
     @hybrid_property
     def password_hash(self):
@@ -43,7 +43,7 @@ class Recipe(db.Model, SerializerMixin):
     minutes_to_complete = db.Column(db.Integer)
 
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'))
-    serialize_rules = ('-user.password_hash',)
+    serialize_rules = ('-_password_hash',)
 
     @validates("instructions")
     def validate_instructions(self, key, value):
